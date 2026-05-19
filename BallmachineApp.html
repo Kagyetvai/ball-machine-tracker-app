@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ball Machine">
+<title>Ball Machine Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0a0e0c;--surface:#111814;--surface2:#192218;
+  --green:#2dff7a;--green-dim:#1a9c4a;--green-glow:rgba(45,255,122,.15);
+  --amber:#ffcc44;--red:#ff4d4d;--coral:#ff7d55;--blue:#4dacff;
+  --text:#f0f5f2;--text2:#7a9488;--text3:#3d5447;
+  --border:rgba(45,255,122,.12);--border2:rgba(45,255,122,.06);
+  --font-display:'Barlow Condensed',sans-serif;
+  --font-body:'Barlow',sans-serif;
+  --r:12px;--r-sm:8px;--r-pill:999px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:var(--font-body);color:var(--text);display:flex;flex-direction:column;height:100dvh}
+.app{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+
+.header{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border2);background:var(--bg);position:sticky;top:0;z-index:10}
+.header-title{font-family:var(--font-display);font-size:22px;font-weight:900;letter-spacing:.04em;color:var(--green);text-transform:uppercase}
+.header-sub{font-size:11px;color:var(--text2);font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+.sync-dot.synced{background:var(--green)}
+.sync-dot.syncing{background:var(--amber);animation:pulse .8s infinite}
+.sync-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.tabbar{display:flex;background:var(--surface);border-bottom:1px solid var(--border2);flex-shrink:0}
+.tab{flex:1;padding:12px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;font-family:var(--font-display);color:var(--text3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
+.tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+
+.view{display:none;padding:16px}
+.view.active{display:block}
+.section-label{font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);margin-bottom:10px}
+
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+.card-accent{border-color:var(--border);background:var(--surface2)}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+input[type=text],select{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);color:var(--text);font-family:var(--font-body);font-size:16px;-webkit-appearance:none;transition:border-color .2s}
+input:focus,select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px var(--green-glow)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a9488' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+select option{background:var(--surface2);color:var(--text)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 20px;border-radius:var(--r-sm);font-family:var(--font-display);font-size:16px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text);transition:all .15s}
+.btn:active{transform:scale(.96)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-primary{background:var(--green);color:#040a06;border-color:var(--green)}
+.btn-full{width:100%}
+.btn-sm{padding:8px 14px;font-size:13px}
+.btn-ghost{border-color:transparent}
+.btn-danger{border-color:var(--red);color:var(--red)}
+
+.avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:900;font-size:16px;flex-shrink:0}
+
+.ball-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.ball-btn{padding:20px 10px;border-radius:var(--r);border:1px solid;font-family:var(--font-display);font-size:22px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;text-align:center;transition:transform .1s,opacity .15s;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ball-btn:active{transform:scale(.94)}
+.ball-btn .pts{font-size:13px;font-weight:600;letter-spacing:.06em;opacity:.7}
+.btn-IN{background:rgba(45,255,122,.12);border-color:var(--green);color:var(--green)}
+.btn-NET{background:rgba(255,204,68,.1);border-color:var(--amber);color:var(--amber)}
+.btn-OUT{background:rgba(255,77,53,.08);border-color:#ff4d35;color:#ff7055}
+.btn-MISS{background:rgba(255,77,77,.08);border-color:var(--red);color:var(--red)}
+.ball-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+.ball-dots{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0}
+.dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:var(--font-display);border:1px solid transparent}
+.dot-IN{background:rgba(45,255,122,.2);color:var(--green);border-color:var(--green)}
+.dot-NET{background:rgba(255,204,68,.2);color:var(--amber);border-color:var(--amber)}
+.dot-OUT{background:rgba(255,112,85,.15);color:#ff7055;border-color:#ff7055}
+.dot-MISS{background:rgba(255,77,77,.15);color:var(--red);border-color:var(--red)}
+.dot-empty{background:var(--surface2);border-color:var(--border)}
+
+.score-big{font-family:var(--font-display);font-size:72px;font-weight:900;color:var(--green);line-height:1}
+.score-max{font-family:var(--font-display);font-size:20px;font-weight:600;color:var(--text3)}
+
+.tier-badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:var(--r-pill);font-family:var(--font-display);font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.tier-machine{background:rgba(45,255,122,.15);color:var(--green);border:1px solid var(--green)}
+.tier-ace{background:rgba(255,204,68,.15);color:var(--amber);border:1px solid var(--amber)}
+.tier-contender{background:rgba(77,172,255,.15);color:var(--blue);border:1px solid var(--blue)}
+.tier-training{background:rgba(255,125,85,.15);color:var(--coral);border:1px solid var(--coral)}
+.tier-rookie{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+
+.level-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:var(--r-pill);font-family:var(--font-display);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.level-1{background:rgba(45,255,122,.1);color:#1a9c4a;border:1px solid rgba(45,255,122,.3)}
+.level-2{background:rgba(255,204,68,.1);color:#9c7d00;border:1px solid rgba(255,204,68,.3)}
+.level-3{background:rgba(255,77,77,.1);color:#cc3333;border:1px solid rgba(255,77,77,.3)}
+
+.lb-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border2)}
+.lb-row:last-child{border-bottom:none}
+.lb-score{font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--green);min-width:52px;text-align:right}
+
+.stat-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.stat-box{background:var(--surface2);border-radius:var(--r-sm);padding:10px 12px;text-align:center}
+.stat-val{font-family:var(--font-display);font-size:26px;font-weight:900}
+.stat-lbl{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:.05em;text-transform:uppercase;margin-top:2px}
+
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(12px);padding:10px 22px;border-radius:var(--r-pill);font-family:var(--font-display);font-size:15px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:999;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.session-complete-card{background:var(--surface2);border:1px solid var(--green);border-radius:var(--r);padding:20px;text-align:center;margin-bottom:14px}
+.prog-bg{background:var(--surface2);border-radius:var(--r-pill);height:6px;overflow:hidden;margin:8px 0}
+.prog-fill{height:6px;border-radius:var(--r-pill);background:var(--green);transition:width .4s}
+.divider{border:none;border-top:1px solid var(--border2);margin:14px 0}
+.rule-row{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2);font-size:14px;align-items:center}
+.rule-row:last-child{border-bottom:none}
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty-icon{font-size:36px;display:block;margin-bottom:10px}
+.finals-banner{background:rgba(255,204,68,.08);border:1px solid rgba(255,204,68,.3);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.finals-banner-text{font-size:13px;color:var(--amber);font-weight:500;line-height:1.5}
+.live-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--r-pill);background:rgba(45,255,122,.1);border:1px solid rgba(45,255,122,.3);font-family:var(--font-display);font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--green);text-transform:uppercase}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse .8s infinite}
+
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:14px}
+.spin{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite}
+#loading p{font-family:var(--font-display);font-size:14px;color:var(--text2);letter-spacing:.08em;text-transform:uppercase}
+.safe-pad{height:max(env(safe-area-inset-bottom,0px),12px)}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spin"></div><p>Connecting...</p></div>
+
+<div class="header">
+  <div>
+    <div class="header-title">Ball Machine</div>
+    <div class="header-sub">Session Tracker</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="live-badge"><span class="live-dot"></span>Live</span>
+    <div class="sync-dot" id="sync-dot"></div>
+  </div>
+</div>
+
+<div class="tabbar">
+  <button class="tab active" onclick="showView('session')" id="tab-session">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.5 12c3-3 5-4.5 8.5-4.5S18.5 9 21.5 12"/><path d="M3.5 12c3 3 5 4.5 8.5 4.5S18.5 15 21.5 12"/></svg>
+    Session
+  </button>
+  <button class="tab" onclick="showView('leaderboard')" id="tab-leaderboard">
+    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Board
+  </button>
+  <button class="tab" onclick="showView('players')" id="tab-players">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><circle cx="19" cy="8" r="2"/><path d="M23 21v-1.5a3 3 0 00-2-2.83"/></svg>
+    Players
+  </button>
+  <button class="tab" onclick="showView('rules')" id="tab-rules">
+    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Rules
+  </button>
+</div>
+
+<div class="app">
+
+  <!-- SESSION -->
+  <div id="view-session" class="view active">
+    <div id="session-setup">
+      <p class="section-label">Start a session</p>
+      <div class="card card-accent">
+        <div class="field"><label>Player</label>
+          <select id="sess-player"><option value="">Select player...</option></select>
+        </div>
+        <div class="field" style="margin-bottom:0"><label>Machine level (set by organizer)</label>
+          <select id="sess-level">
+            <option value="1">Level 1 — First Timer (×2.0)</option>
+            <option value="2">Level 2 — Intermediate (×1.6)</option>
+            <option value="3">Level 3 — Advanced (×1.3)</option>
+          </select>
+        </div>
+      </div>
+      <div class="finals-banner">
+        <div style="font-size:20px">🏆</div>
+        <div class="finals-banner-text">Finals are played at <strong>Level 3</strong> only — no handicap advantage in the final round.</div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="startSession()">Launch Session</button>
+    </div>
+
+    <div id="session-active" style="display:none">
+      <div class="card card-accent" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="avatar" id="sess-avatar" style="width:36px;height:36px;font-size:13px"></div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:16px;font-weight:800" id="sess-name-display"></div>
+              <div id="sess-level-badge"></div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--font-display);font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Ball</div>
+            <div style="font-family:var(--font-display);font-size:28px;font-weight:900;line-height:1"><span id="ball-num">0</span><span style="color:var(--text3)">/10</span></div>
+          </div>
+        </div>
+        <div class="prog-bg"><div class="prog-fill" id="ball-progress" style="width:0%"></div></div>
+        <div class="ball-dots" id="ball-dots"></div>
+      </div>
+
+      <div id="session-scoring">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <p class="section-label" style="margin:0">Record ball <span id="next-ball-num">1</span></p>
+          <button class="btn btn-sm btn-ghost" id="undo-btn" onclick="undoLast()" style="color:var(--text3);font-size:13px" disabled>↩ Undo</button>
+        </div>
+        <div class="ball-grid">
+          <button class="ball-btn btn-IN" onclick="recordBall('IN')"><span>IN</span><span class="pts">+3 pts</span></button>
+          <button class="ball-btn btn-NET" onclick="recordBall('NET')"><span>NET</span><span class="pts">+1 pt</span></button>
+          <button class="ball-btn btn-OUT" onclick="recordBall('OUT')"><span>OUT</span><span class="pts">0 pts</span></button>
+          <button class="ball-btn btn-MISS" onclick="recordBall('MISS')"><span>MISS</span><span class="pts">−1 pt</span></button>
+        </div>
+      </div>
+
+      <div id="session-result" style="display:none">
+        <div class="session-complete-card">
+          <div style="font-family:var(--font-display);font-size:13px;color:var(--text2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Session complete</div>
+          <div class="score-big" id="result-raw"></div>
+          <div class="score-max">/30 pts raw</div>
+          <div style="margin:12px 0" id="result-tier"></div>
+          <div style="font-family:var(--font-display);font-size:15px;color:var(--text2);margin-bottom:4px">Adjusted score</div>
+          <div style="font-family:var(--font-display);font-size:48px;font-weight:900;color:var(--amber)" id="result-adj"></div>
+          <div style="font-size:13px;color:var(--text3);margin-top:4px" id="result-mult"></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="stat-val" id="res-in" style="color:var(--green)">0</div><div class="stat-lbl">IN</div></div>
+          <div class="stat-box"><div class="stat-val" id="res-net" style="color:var(--amber)">0</div><div class="stat-lbl">NET</div></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="stat-val" id="res-out" style="color:#ff7055">0</div><div class="stat-lbl">OUT</div></div>
+          <div class="stat-box"><div class="stat-val" id="res-miss" style="color:var(--red)">0</div><div class="stat-lbl">MISS</div></div>
+        </div>
+        <button class="btn btn-primary btn-full" id="save-btn" onclick="saveSession()" style="margin-bottom:10px">Save to Leaderboard</button>
+        <button class="btn btn-full btn-ghost" onclick="discardSession()" style="color:var(--text3)">Discard &amp; Start Over</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div id="view-leaderboard" class="view">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <p class="section-label" style="margin:0">Live leaderboard</p>
+      <button class="btn btn-sm btn-ghost" onclick="loadLeaderboard()" style="color:var(--text2);font-size:12px">↻ Refresh</button>
+    </div>
+    <div class="card" id="lb-card"><div class="empty"><span class="empty-icon">🎯</span><p>No sessions yet.</p></div></div>
+    <hr class="divider">
+    <p class="section-label">Session history</p>
+    <div id="history-list"></div>
+    <hr class="divider">
+    <button class="btn btn-danger btn-full btn-sm" onclick="clearAllSessions()">Clear all sessions</button>
+    <div class="safe-pad"></div>
+  </div>
+
+  <!-- PLAYERS -->
+  <div id="view-players" class="view">
+    <p class="section-label">Registered players</p>
+    <div class="card" id="player-list-card"><div class="empty"><span class="empty-icon">🎾</span><p>No players yet.</p></div></div>
+    <hr class="divider">
+    <p class="section-label">Add player</p>
+    <div class="card card-accent">
+      <div class="field"><label>Name</label><input type="text" id="new-name" placeholder="e.g. Karcsi" maxlength="20" autocomplete="off" autocorrect="off" spellcheck="false"></div>
+      <button class="btn btn-primary btn-full" id="add-player-btn" onclick="addPlayer()">+ Add Player</button>
+    </div>
+    <div class="safe-pad"></div>
+  </div>
+
+  <!-- RULES -->
+  <div id="view-rules" class="view">
+    <p class="section-label">Scoring — per ball</p>
+    <div class="card">
+      <div class="rule-row"><div style="font-family:var(--font-display);font-weight:800;min-width:70px;color:var(--green)">IN +3</div><div>Ball clears the net and lands in bounds.</div></div>
+      <div class="rule-row"><div style="font-family:var(--font-display);font-weight:800;min-width:70px;color:var(--amber)">NET +1</div><div>Ball hits the net. Partial credit.</div></div>
+      <div class="rule-row"><div style="font-family:var(--font-display);font-weight:800;min-width:70px;color:#ff7055">OUT 0</div><div>Ball lands out of bounds.</div></div>
+      <div class="rule-row"><div style="font-family:var(--font-display);font-weight:800;min-width:70px;color:var(--red)">MISS −1</div><div>No contact with the ball at all.</div></div>
+    </div>
+    <p class="section-label" style="margin-top:14px">Session tiers</p>
+    <div class="card">
+      <div class="rule-row"><span class="tier-badge tier-machine" style="font-size:11px;min-width:130px">Machine Beater</span><span style="font-size:13px;color:var(--text2)">27–30 pts</span></div>
+      <div class="rule-row"><span class="tier-badge tier-ace" style="font-size:11px;min-width:130px">Ace</span><span style="font-size:13px;color:var(--text2)">21–26 pts</span></div>
+      <div class="rule-row"><span class="tier-badge tier-contender" style="font-size:11px;min-width:130px">Contender</span><span style="font-size:13px;color:var(--text2)">12–20 pts</span></div>
+      <div class="rule-row"><span class="tier-badge tier-training" style="font-size:11px;min-width:130px">In Training</span><span style="font-size:13px;color:var(--text2)">3–11 pts</span></div>
+      <div class="rule-row"><span class="tier-badge tier-rookie" style="font-size:11px;min-width:130px">Rookie</span><span style="font-size:13px;color:var(--text2)">≤2 pts</span></div>
+    </div>
+    <p class="section-label" style="margin-top:14px">Machine levels &amp; multipliers</p>
+    <div class="card">
+      <div class="rule-row"><span class="level-badge level-1" style="min-width:100px">Lvl 1 ×2.0</span><span style="font-size:13px;color:var(--text2)">First Timer</span></div>
+      <div class="rule-row"><span class="level-badge level-2" style="min-width:100px">Lvl 2 ×1.6</span><span style="font-size:13px;color:var(--text2)">Intermediate</span></div>
+      <div class="rule-row"><span class="level-badge level-3" style="min-width:100px">Lvl 3 ×1.3</span><span style="font-size:13px;color:var(--text2)">Advanced</span></div>
+    </div>
+    <p class="section-label" style="margin-top:14px">General rules</p>
+    <div class="card">
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:10px;font-size:14px;color:var(--text2);line-height:1.5;padding:4px 0">
+        <li>• Exactly 10 balls per session — no redos once recorded</li>
+        <li>• Machine level set by the organizer only</li>
+        <li>• Net clip that goes IN counts as IN</li>
+        <li>• Machine misfire = replay, does not count</li>
+        <li>• Finals at Level 3 only (×1.3)</li>
+        <li>• The machine is designed to beat you — that's the point</li>
+      </ul>
+    </div>
+    <div class="safe-pad"></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── SUPABASE ──────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://pnwbnymwkvvjfnbulcyf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_lFtHW-5NxVDK1BCenDNeig_CvS5GnVg';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── CONSTANTS ─────────────────────────────────────────────────────
+const MULT = {1:2.0, 2:1.6, 3:1.3};
+const LVL_NAME = {1:'First Timer', 2:'Intermediate', 3:'Advanced'};
+const PTS = {IN:3, NET:1, OUT:0, MISS:-1};
+const BG = ['#1a3d2a','#2a1a3d','#3d2a1a','#1a2a3d','#3d1a1a','#1a3d3d','#3d3d1a','#2a1a2a'];
+const FG = ['#2dff7a','#aa99ff','#ffaa66','#66bbff','#ff7777','#44dddd','#dddd44','#cc88cc'];
+
+let players = [];
+let sess = null;
+
+// ── UTILS ─────────────────────────────────────────────────────────
+const ini = n => n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
+const col = i => [BG[((i%BG.length)+BG.length)%BG.length], FG[((i%FG.length)+FG.length)%FG.length]];
+const rawScore = balls => Math.max(0, balls.reduce((s,b)=>s+PTS[b], 0));
+
+function getTier(raw){
+  if(raw>=27)return{label:'Machine Beater',cls:'tier-machine'};
+  if(raw>=21)return{label:'Ace',cls:'tier-ace'};
+  if(raw>=12)return{label:'Contender',cls:'tier-contender'};
+  if(raw>=3) return{label:'In Training',cls:'tier-training'};
+  return{label:'Rookie',cls:'tier-rookie'};
+}
+
+function toast(msg, err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.background=err?'var(--red)':'var(--green)';
+  t.style.color=err?'#fff':'#040a06';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+function sync(state){
+  const d=document.getElementById('sync-dot');
+  d.className='sync-dot '+(state||'');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+async function init(){
+  try{
+    await loadPlayers();
+    setupRealtime();
+    document.getElementById('loading').style.display='none';
+    sync('synced');
+  }catch(e){
+    document.getElementById('loading').innerHTML=
+      '<p style="color:var(--red);font-family:var(--font-display);font-size:14px;text-align:center;padding:20px">Connection failed.<br>Check internet and reload.</p>';
+    sync('error');
+  }
+}
+
+function setupRealtime(){
+  db.channel('public:sessions')
+    .on('postgres_changes',{event:'*',schema:'public',table:'sessions'},()=>{
+      if(document.getElementById('view-leaderboard').classList.contains('active'))loadLeaderboard();
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'players'},async()=>{
+      await loadPlayers();
+      if(document.getElementById('view-players').classList.contains('active'))renderPlayers();
+    })
+    .subscribe();
+}
+
+// ── VIEWS ─────────────────────────────────────────────────────────
+function showView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.getElementById('tab-'+v).classList.add('active');
+  if(v==='leaderboard')loadLeaderboard();
+  if(v==='players')renderPlayers();
+  if(v==='session')renderSessionSetup();
+}
+
+// ── PLAYERS ───────────────────────────────────────────────────────
+async function loadPlayers(){
+  const{data,error}=await db.from('players').select('*').order('name');
+  if(error)throw error;
+  players=data||[];
+  renderSessionSetup();
+}
+
+async function addPlayer(){
+  const n=document.getElementById('new-name').value.trim();
+  if(!n){toast('Enter a name',true);return}
+  const btn=document.getElementById('add-player-btn');
+  btn.disabled=true;btn.textContent='Saving...';sync('syncing');
+  const{error}=await db.from('players').insert({name:n});
+  btn.disabled=false;btn.textContent='+ Add Player';
+  if(error){
+    toast(error.message.includes('unique')?'Player already exists':'Error saving',true);
+    sync('error');return;
+  }
+  document.getElementById('new-name').value='';
+  await loadPlayers();renderPlayers();sync('synced');toast(n+' added!');
+}
+
+async function removePlayer(id){
+  if(!confirm('Remove this player?'))return;
+  sync('syncing');
+  const{error}=await db.from('players').delete().eq('id',id);
+  if(error){toast('Error removing',true);sync('error');return}
+  await loadPlayers();renderPlayers();sync('synced');
+}
+
+function renderPlayers(){
+  const el=document.getElementById('player-list-card');
+  if(!players.length){el.innerHTML='<div class="empty"><span class="empty-icon">🎾</span><p>No players yet.</p></div>';return}
+  el.innerHTML=players.map((p,i)=>{
+    const[bg,fg]=col(i);
+    return`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border2)">
+      <div class="avatar" style="width:38px;height:38px;font-size:13px;background:${bg};color:${fg}">${ini(p.name)}</div>
+      <div style="flex:1;font-weight:600;font-size:15px">${p.name}</div>
+      <button class="btn btn-sm btn-ghost" onclick="removePlayer(${p.id})" style="color:var(--text3)">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function renderSessionSetup(){
+  const sel=document.getElementById('sess-player');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">Select player...</option>'+players.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(cur)sel.value=cur;
+}
+
+// ── SESSION ───────────────────────────────────────────────────────
+function startSession(){
+  const pid=+document.getElementById('sess-player').value;
+  const level=+document.getElementById('sess-level').value;
+  if(!pid){toast('Select a player first',true);return}
+  const player=players.find(p=>p.id===pid);
+  const i=players.indexOf(player);
+  const[bg,fg]=col(i);
+  sess={playerId:pid,playerName:player.name,level,balls:[],multiplier:MULT[level]};
+  document.getElementById('session-setup').style.display='none';
+  document.getElementById('session-active').style.display='block';
+  document.getElementById('session-result').style.display='none';
+  document.getElementById('session-scoring').style.display='block';
+  const av=document.getElementById('sess-avatar');
+  av.textContent=ini(player.name);av.style.background=bg;av.style.color=fg;
+  document.getElementById('sess-name-display').textContent=player.name;
+  document.getElementById('sess-level-badge').innerHTML=`<span class="level-badge level-${level}">Level ${level} — ${LVL_NAME[level]} ×${MULT[level]}</span>`;
+  updateSessionUI();
+}
+
+function recordBall(type){
+  if(!sess||sess.balls.length>=10)return;
+  sess.balls.push(type);
+  document.getElementById('undo-btn').disabled=false;
+  updateSessionUI();
+  if(sess.balls.length===10)showResult();
+}
+
+function undoLast(){
+  if(!sess||!sess.balls.length)return;
+  sess.balls.pop();
+  document.getElementById('session-result').style.display='none';
+  document.getElementById('session-scoring').style.display='block';
+  document.getElementById('undo-btn').disabled=sess.balls.length===0;
+  updateSessionUI();
+}
+
+function updateSessionUI(){
+  const balls=sess.balls, n=balls.length;
+  document.getElementById('ball-num').textContent=n;
+  document.getElementById('next-ball-num').textContent=n+1;
+  document.getElementById('ball-progress').style.width=(n/10*100)+'%';
+  const labelMap={IN:'IN',NET:'NET',OUT:'OUT',MISS:'−1'};
+  document.getElementById('ball-dots').innerHTML=
+    Array.from({length:10},(_,i)=>i<balls.length
+      ?`<div class="dot dot-${balls[i]}">${labelMap[balls[i]]}</div>`
+      :`<div class="dot dot-empty"></div>`
+    ).join('');
+  document.querySelectorAll('.ball-btn').forEach(b=>b.disabled=n>=10);
+}
+
+function showResult(){
+  document.getElementById('session-scoring').style.display='none';
+  document.getElementById('session-result').style.display='block';
+  const balls=sess.balls;
+  const raw=rawScore(balls);
+  const adj=+(raw*sess.multiplier).toFixed(1);
+  const tier=getTier(raw);
+  sess.raw=raw;sess.adjusted=adj;sess.tier=tier.label;
+  document.getElementById('result-raw').textContent=raw;
+  document.getElementById('result-tier').innerHTML=`<span class="tier-badge ${tier.cls}">${tier.label}</span>`;
+  document.getElementById('result-adj').textContent=adj.toFixed(1);
+  document.getElementById('result-mult').textContent=`${raw} × ${sess.multiplier} = ${adj.toFixed(1)} adjusted`;
+  const counts={IN:0,NET:0,OUT:0,MISS:0};
+  balls.forEach(b=>counts[b]++);
+  ['in','net','out','miss'].forEach(k=>document.getElementById('res-'+k).textContent=counts[k.toUpperCase()]);
+}
+
+async function saveSession(){
+  const btn=document.getElementById('save-btn');
+  btn.disabled=true;btn.textContent='Saving...';sync('syncing');
+  const{error}=await db.from('sessions').insert({
+    player_id:sess.playerId, player_name:sess.playerName,
+    level:sess.level, multiplier:sess.multiplier,
+    balls:sess.balls, raw:sess.raw, adjusted:sess.adjusted, tier:sess.tier
+  });
+  btn.disabled=false;btn.textContent='Save to Leaderboard';
+  if(error){toast('Error saving session',true);sync('error');return}
+  sync('synced');sess=null;
+  document.getElementById('session-active').style.display='none';
+  document.getElementById('session-setup').style.display='block';
+  toast('Session saved! 🎾');
+  showView('leaderboard');
+}
+
+function discardSession(){
+  sess=null;
+  document.getElementById('session-active').style.display='none';
+  document.getElementById('session-setup').style.display='block';
+}
+
+// ── LEADERBOARD ───────────────────────────────────────────────────
+async function loadLeaderboard(){
+  sync('syncing');
+  const{data,error}=await db.from('sessions').select('*').order('created_at',{ascending:false});
+  if(error){toast('Error loading leaderboard',true);sync('error');return}
+  sync('synced');
+  renderLeaderboard(data||[]);
+}
+
+function renderLeaderboard(sessions){
+  const lbEl=document.getElementById('lb-card');
+  const histEl=document.getElementById('history-list');
+  if(!sessions.length){
+    lbEl.innerHTML='<div class="empty"><span class="empty-icon">🎯</span><p>No sessions yet.</p></div>';
+    histEl.innerHTML='';return;
+  }
+  // Best per player
+  const best={};
+  sessions.forEach(s=>{if(!best[s.player_id]||s.adjusted>best[s.player_id].adjusted)best[s.player_id]=s});
+  const ranked=Object.values(best).sort((a,b)=>b.adjusted-a.adjusted);
+  const icons=['🥇','🥈','🥉'];
+  lbEl.innerHTML=ranked.map((s,i)=>{
+    const pi=players.findIndex(p=>p.id===s.player_id);
+    const[bg,fg]=col(pi>=0?pi:i);
+    const tier=getTier(s.raw);
+    return`<div class="lb-row">
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:900;min-width:32px;text-align:center">${i<3?icons[i]:'#'+(i+1)}</div>
+      <div class="avatar" style="width:36px;height:36px;font-size:13px;background:${bg};color:${fg}">${ini(s.player_name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:15px">${s.player_name}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px">
+          <span class="tier-badge ${tier.cls}" style="font-size:10px;padding:2px 8px">${tier.label}</span>
+          <span class="level-badge level-${s.level}" style="font-size:10px;padding:2px 8px">Lvl ${s.level}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:3px">${s.raw} raw × ${s.multiplier}</div>
+      </div>
+      <div class="lb-score">${s.adjusted.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+
+  histEl.innerHTML='<div class="card">'+sessions.map(s=>{
+    const pi=players.findIndex(p=>p.id===s.player_id);
+    const[bg,fg]=col(pi>=0?pi:0);
+    const ins=(s.balls||[]).filter(b=>b==='IN').length;
+    const dateStr=new Date(s.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    return`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border2)">
+      <div class="avatar" style="width:34px;height:34px;font-size:12px;background:${bg};color:${fg}">${ini(s.player_name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600">${s.player_name}</div>
+        <div style="font-size:12px;color:var(--text3)">${dateStr} · Lvl ${s.level} · ${ins} IN</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:var(--font-display);font-size:18px;font-weight:900;color:var(--amber)">${s.adjusted.toFixed(1)}</div>
+        <div style="font-size:11px;color:var(--text3)">${s.raw} raw</div>
+      </div>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+async function clearAllSessions(){
+  if(!confirm('Clear ALL sessions from the leaderboard? Players will remain.'))return;
+  sync('syncing');
+  const{error}=await db.from('sessions').delete().neq('id',0);
+  if(error){toast('Error clearing',true);sync('error');return}
+  sync('synced');toast('All sessions cleared');loadLeaderboard();
+}
+
+init();
+</script>
+</body>
+</html>
